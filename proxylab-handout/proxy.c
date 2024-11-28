@@ -47,7 +47,7 @@ void doit(int fd)
 {
     struct stat sbuf;
     char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
-    char filename[MAXLINE];
+    char filename[MAXLINE], cgiargs[MAXLINE];
     rio_t rio;
 
     /* Read request line and headers */
@@ -62,7 +62,7 @@ void doit(int fd)
         return;
     }                                                    //line:netp:doit:endrequesterr
     read_requesthdrs(&rio);                              //line:netp:doit:readrequesthdrs
-
+    parse_uri(uri, filename, cgiargs);
     /* Parse URI from GET request */
     if (stat(filename, &sbuf) < 0) {                     //line:netp:doit:beginnotfound
 	    clienterror(fd, filename, "404", "Not found",
