@@ -66,7 +66,7 @@ void doit(int fd)
     /* Parse URI from GET request */
     if (stat(filename, &sbuf) < 0) {                     //line:netp:doit:beginnotfound
 	    clienterror(fd, filename, "404", "Not found",
-		    "Tiny couldn't find this file");
+		    "Proxy couldn't find this file");
 	    return;
     }                                                    //line:netp:doit:endnotfound
     
@@ -75,11 +75,22 @@ void doit(int fd)
     sscanf(uri, "http://%s/*", Host);
     Host = strcat("Host: ", Host); 
     strcpy(buf, Host);
-    strcpy(buf, user_agent_hdr);
-    strcpy(buf, "Connection: close\r\n");
-    strcpy(buf, "Proxy-Connection: close\r\n");
-    
     Rio_writen(fd, buf, MAXLINE);
+    strcpy(buf, user_agent_hdr);
+    Rio_writen(fd, buf, MAXLINE);
+    sprintf(buf, "Connection: close\r\n");
+    Rio_writen(fd, buf, MAXLINE);
+    sprintf(buf, "Proxy-Connection: close\r\n");
+    Rio_writen(fd, buf, MAXLINE);
+    
+    /* Request body */
+    int filesize = sbuf.st_size;
+    /* Send response body to client */
+    int srcfd = Open(filename, O_RDONLY, 0); //line:netp:servestatic:open
+    char * srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0); //line:netp:servestatic:mmap
+    Close(srcfd);                       //line:netp:servestatic:close
+    Rio_writen(fd, srcp, filesize);     //line:netp:servestatic:write
+    Munmap(srcp, filesize);             //line:netp:servestatic:munmap
 
 }
 /* $end doit */
