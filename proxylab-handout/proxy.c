@@ -8,7 +8,7 @@
 /* You won't lose style points for including this long line in your code */
 static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3\r\n";
 void doit(int fd);
-void read_requesthdrs(rio_t *rp);
+void read_requesthdrs(rio_t *rp, char *headers);
 int parse_uri(char *uri, char *filename, char *cgiargs);
 void clienterror(int fd, char *cause, char *errnum, 
 		 char *shortmsg, char *longmsg);
@@ -25,7 +25,6 @@ int main(int argc, char** argv)
         fprintf(stderr, "usage: %s <port>\n", argv[0]);
         exit(1);
     }
-
     listenfd = Open_listenfd(argv[1]);
     while (1) {
         clientlen = sizeof(clientaddr);
@@ -43,73 +42,109 @@ int main(int argc, char** argv)
  * doit - handle one HTTP request/response transaction
  */
 /* $begin doit */
-void doit(int fd) 
-{
-    struct stat sbuf;
+void doit(int fd) {
     char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
-    char filename[MAXLINE], cgiargs[MAXLINE];
-    rio_t rio;
-
+    char path[MAXLINE], Host[MAXLINE], headers[MAXLINE];
+    rio_t rio, rio_output;
+    int clientfd;
+    printf("Hello World!\n");
+    return ;
     /* Read request line and headers */
-    Rio_readinitb(&rio, fd);
-    if (!Rio_readlineb(&rio, buf, MAXLINE))  //line:netp:doit:readrequest
+    Rio_readinitb(&rio, fd); // 初始化写入客户端的RIO
+    if (!Rio_readlineb(&rio, buf, MAXLINE))  // Read request line
         return;
     printf("%s", buf);
-    sscanf(buf, "%s %s %s", method, uri, version);       //line:netp:doit:parserequest
-    if (strcasecmp(method, "GET")) {                     //line:netp:doit:beginrequesterr
-        clienterror(fd, method, "501", "Not Implemented",
-                    "Tiny does not implement this method");
+    sscanf(buf, "%s %s %s", method, uri, version);
+    printf("method = %s", method);
+    if (strcmp(method, "GET")) {  // Only handle GET requests
         return;
-    }                                                    //line:netp:doit:endrequesterr
-    read_requesthdrs(&rio);                              //line:netp:doit:readrequesthdrs
-    parse_uri(uri, filename, cgiargs);
-    /* Parse URI from GET request */
-    if (stat(filename, &sbuf) < 0) {                     //line:netp:doit:beginnotfound
-	    clienterror(fd, filename, "404", "Not found",
-		    "Proxy couldn't find this file");
-	    return;
-    }                                                    //line:netp:doit:endnotfound
-    
-    /* Request headers */
-    char * Host = "";
-    sscanf(uri, "http://%s/*", Host);
-    Host = strcat("Host: ", Host); 
-    strcpy(buf, Host);
-    Rio_writen(fd, buf, MAXLINE);
-    strcpy(buf, user_agent_hdr);
-    Rio_writen(fd, buf, MAXLINE);
-    sprintf(buf, "Connection: close\r\n");
-    Rio_writen(fd, buf, MAXLINE);
-    sprintf(buf, "Proxy-Connection: close\r\n");
-    Rio_writen(fd, buf, MAXLINE);
-    
-    /* Request body */
-    int filesize = sbuf.st_size;
-    /* Send response body to client */
-    int srcfd = Open(filename, O_RDONLY, 0); //line:netp:servestatic:open
-    char * srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0); //line:netp:servestatic:mmap
-    Close(srcfd);                       //line:netp:servestatic:close
-    Rio_writen(fd, srcp, filesize);     //line:netp:servestatic:write
-    Munmap(srcp, filesize);             //line:netp:servestatic:munmap
+    }
 
+    read_requesthdrs(&rio, headers);
+
+    /* Parse URI to extract Host and Path */
+
+    char* hostbegin = strstr(uri, "\\") + 2;
+    char *hostend = strpbrk(hostbegin, " :/\r\n");
+    int hostlen = hostend - hostbegin;
+    strncpy(Host, hostbegin, hostlen);
+    Host[hostlen] = '\0';
+
+    char *portptr = strchr(hostbegin, ':');
+    char port[10] = "80"; // 默认端口
+
+    if (portptr) {
+        sscanf(portptr, ":%s", port);
+    }
+
+    char *pathptr = strchr(hostbegin, '/');
+    if (pathptr) {
+        strcpy(path, pathptr);
+    } else {
+        strcpy(path, "/");
+    }
+
+    printf("Host: %s, Path: %s\n", Host, path);  // Debugging output
+
+    /* Connect to the target server */
+    clientfd = Open_clientfd(Host, port);  // Using default HTTP port 80
+    if (clientfd < 0) {
+        fprintf(stderr, "Failed to connect to %s:80\n", Host);
+        return;
+    }
+
+    Rio_readinitb(&rio_output, clientfd);
+
+    /* Send request to the target server */
+    snprintf(buf, MAXLINE, "GET %s HTTP/1.0\r\n", path);
+    Rio_writen(clientfd, buf, strlen(buf));
+
+    snprintf(buf, MAXLINE, "Host: %s\r\n", Host);
+    Rio_writen(clientfd, buf, strlen(buf));
+
+    snprintf(buf, MAXLINE, "%s", user_agent_hdr);
+    Rio_writen(clientfd, buf, strlen(buf));
+
+    snprintf(buf, MAXLINE, "Connection: close\r\n");
+    Rio_writen(clientfd, buf, strlen(buf));
+
+    snprintf(buf, MAXLINE, "Proxy-Connection: close\r\n");
+    Rio_writen(clientfd, buf, strlen(buf));
+
+    Rio_writen(clientfd, headers, strlen(headers));
+
+    /* Send empty line to end headers */
+    snprintf(buf, MAXLINE, "\r\n");
+    Rio_writen(clientfd, buf, strlen(buf));
+
+    /* Send response body from target server back to client */
+    int n;
+    while ((n = Rio_readnb(&rio_output, buf, MAXLINE)) > 0) {
+        Rio_writen(fd, buf, n);
+    }
+
+    Close(clientfd);
+    return;
 }
+
 /* $end doit */
 
 /*
  * read_requesthdrs - read HTTP request headers
  */
 /* $begin read_requesthdrs */
-void read_requesthdrs(rio_t *rp) 
-{
+void read_requesthdrs(rio_t *rp, char *headers) {
     char buf[MAXLINE];
+    headers[0] = '\0';
 
     Rio_readlineb(rp, buf, MAXLINE);
-    printf("%s", buf);
-    while(strcmp(buf, "\r\n")) {          //line:netp:readhdrs:checkterm
-	Rio_readlineb(rp, buf, MAXLINE);
-	printf("%s", buf);
+    while(strcmp(buf, "\r\n")) {
+        if (!strstr(buf, "Host:") && !strstr(buf, "User-Agent:") &&
+            !strstr(buf, "Connection:") && !strstr(buf, "Proxy-Connection:")) {
+            strcat(headers, buf);
+        }
+        Rio_readlineb(rp, buf, MAXLINE);
     }
-    return;
 }
 /* $end read_requesthdrs */
 
@@ -163,13 +198,13 @@ void clienterror(int fd, char *cause, char *errnum,
     /* Print the HTTP response body */
     sprintf(buf, "<html><title>Tiny Error</title>");
     Rio_writen(fd, buf, strlen(buf));
-    sprintf(buf, "<body bgcolor=""ffffff"">\r\n");
+    sprintf(buf, "<body bgcolor=""fffffe"">\r\n");
     Rio_writen(fd, buf, strlen(buf));
     sprintf(buf, "%s: %s\r\n", errnum, shortmsg);
     Rio_writen(fd, buf, strlen(buf));
     sprintf(buf, "<p>%s: %s\r\n", longmsg, cause);
     Rio_writen(fd, buf, strlen(buf));
-    sprintf(buf, "<hr><em>The Tiny Web server</em>\r\n");
+    sprintf(buf, "<hr><em>The Proxy Web server</em>\r\n");
     Rio_writen(fd, buf, strlen(buf));
 }
 /* $end clienterror */
