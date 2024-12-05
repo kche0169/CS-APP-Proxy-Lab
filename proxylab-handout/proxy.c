@@ -45,86 +45,90 @@ int main(int argc, char** argv)
 void doit(int fd) {
     char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
     char path[MAXLINE], Host[MAXLINE], headers[MAXLINE];
-    rio_t rio, rio_output;
-    int clientfd;
-    printf("Hello World!\n");
-    return ;
+    rio_t rio_input, rio_output;
+    int clientfd_to_tiny;
+    printf("buf data:\n");
+    
     /* Read request line and headers */
-    Rio_readinitb(&rio, fd); // 初始化写入客户端的RIO
-    if (!Rio_readlineb(&rio, buf, MAXLINE))  // Read request line
+    Rio_readinitb(&rio_input, fd); // 初始化写入客户端的RIO
+    if (!Rio_readlineb(&rio_input, buf, MAXLINE))  // Read request line
         return;
     printf("%s", buf);
+    
     sscanf(buf, "%s %s %s", method, uri, version);
-    printf("method = %s", method);
+    printf("method = %s\n", method);
+
     if (strcmp(method, "GET")) {  // Only handle GET requests
         return;
     }
-
-    read_requesthdrs(&rio, headers);
-
-    /* Parse URI to extract Host and Path */
-
-    char* hostbegin = strstr(uri, "\\") + 2;
-    char *hostend = strpbrk(hostbegin, " :/\r\n");
-    int hostlen = hostend - hostbegin;
-    strncpy(Host, hostbegin, hostlen);
-    Host[hostlen] = '\0';
-
-    char *portptr = strchr(hostbegin, ':');
-    char port[10] = "80"; // 默认端口
-
-    if (portptr) {
-        sscanf(portptr, ":%s", port);
-    }
-
-    char *pathptr = strchr(hostbegin, '/');
-    if (pathptr) {
-        strcpy(path, pathptr);
-    } else {
-        strcpy(path, "/");
-    }
-
-    printf("Host: %s, Path: %s\n", Host, path);  // Debugging output
-
-    /* Connect to the target server */
-    clientfd = Open_clientfd(Host, port);  // Using default HTTP port 80
-    if (clientfd < 0) {
-        fprintf(stderr, "Failed to connect to %s:80\n", Host);
-        return;
-    }
-
-    Rio_readinitb(&rio_output, clientfd);
-
-    /* Send request to the target server */
-    snprintf(buf, MAXLINE, "GET %s HTTP/1.0\r\n", path);
-    Rio_writen(clientfd, buf, strlen(buf));
-
-    snprintf(buf, MAXLINE, "Host: %s\r\n", Host);
-    Rio_writen(clientfd, buf, strlen(buf));
-
-    snprintf(buf, MAXLINE, "%s", user_agent_hdr);
-    Rio_writen(clientfd, buf, strlen(buf));
-
-    snprintf(buf, MAXLINE, "Connection: close\r\n");
-    Rio_writen(clientfd, buf, strlen(buf));
-
-    snprintf(buf, MAXLINE, "Proxy-Connection: close\r\n");
-    Rio_writen(clientfd, buf, strlen(buf));
-
-    Rio_writen(clientfd, headers, strlen(headers));
-
-    /* Send empty line to end headers */
-    snprintf(buf, MAXLINE, "\r\n");
-    Rio_writen(clientfd, buf, strlen(buf));
-
-    /* Send response body from target server back to client */
-    int n;
-    while ((n = Rio_readnb(&rio_output, buf, MAXLINE)) > 0) {
-        Rio_writen(fd, buf, n);
-    }
-
-    Close(clientfd);
+    read_requesthdrs(&rio_input, headers);
+    printf("headers = %s\n", headers);
     return;
+    
+
+    // /* Parse URI to extract Host and Path */
+
+    // char* hostbegin = strstr(uri, "\\") + 2;
+    // char *hostend = strpbrk(hostbegin, " :/\r\n");
+    // int hostlen = hostend - hostbegin;
+    // strncpy(Host, hostbegin, hostlen);
+    // Host[hostlen] = '\0';
+
+    // char *portptr = strchr(hostbegin, ':');
+    // char port[10] = "80"; // 默认端口
+
+    // if (portptr) {
+    //     sscanf(portptr, ":%s", port);
+    // }
+
+    // char *pathptr = strchr(hostbegin, '/');
+    // if (pathptr) {
+    //     strcpy(path, pathptr);
+    // } else {
+    //     strcpy(path, "/");
+    // }
+
+    // printf("Host: %s, Path: %s\n", Host, path);  // Debugging output
+
+    // /* Connect to the target server */
+    // clientfd = Open_clientfd(Host, port);  // Using default HTTP port 80
+    // if (clientfd < 0) {
+    //     fprintf(stderr, "Failed to connect to %s:80\n", Host);
+    //     return;
+    // }
+
+    // Rio_readinitb(&rio_output, clientfd);
+
+    // /* Send request to the target server */
+    // snprintf(buf, MAXLINE, "GET %s HTTP/1.0\r\n", path);
+    // Rio_writen(clientfd, buf, strlen(buf));
+
+    // snprintf(buf, MAXLINE, "Host: %s\r\n", Host);
+    // Rio_writen(clientfd, buf, strlen(buf));
+
+    // snprintf(buf, MAXLINE, "%s", user_agent_hdr);
+    // Rio_writen(clientfd, buf, strlen(buf));
+
+    // snprintf(buf, MAXLINE, "Connection: close\r\n");
+    // Rio_writen(clientfd, buf, strlen(buf));
+
+    // snprintf(buf, MAXLINE, "Proxy-Connection: close\r\n");
+    // Rio_writen(clientfd, buf, strlen(buf));
+
+    // Rio_writen(clientfd, headers, strlen(headers));
+
+    // /* Send empty line to end headers */
+    // snprintf(buf, MAXLINE, "\r\n");
+    // Rio_writen(clientfd, buf, strlen(buf));
+
+    // /* Send response body from target server back to client */
+    // int n;
+    // while ((n = Rio_readnb(&rio_output, buf, MAXLINE)) > 0) {
+    //     Rio_writen(fd, buf, n);
+    // }
+
+    // Close(clientfd);
+    // return;
 }
 
 /* $end doit */
