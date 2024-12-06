@@ -66,7 +66,7 @@ void doit(int fd) {
     printf("uri = %s\n", uri);
     // /* Parse URI to extract Host and Path */
     if (strcmp("/", uri) == 0) {
-        fprintf(stderr, "根目录");
+        fprintf(stderr, "Your uri: %s can't be parsed. ", uri);
         return;
     }
     char* hostbegin = strstr(uri, "//") + 2;
