@@ -44,7 +44,7 @@ int main(int argc, char** argv)
 /* $begin doit */
 void doit(int fd) {
     char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
-    char path[MAXLINE], Host[MAXLINE], headers[MAXLINE];
+    char path[MAXLINE], Host[MAXLINE], headers[MAXLINE], Port[MAXLINE];
     rio_t rio_input, rio_output;
     int clientfd_to_tiny;
     printf("buf data:\n");
@@ -63,38 +63,42 @@ void doit(int fd) {
     }
     read_requesthdrs(&rio_input, headers);
     printf("headers = %s\n", headers);
-    printf("uri = %s", uri);
+    printf("uri = %s\n", uri);
     // /* Parse URI to extract Host and Path */
-    if (strcmp("/", uri) != 0) {
-        char* hostbegin = strstr(uri, "//") + 2;
-        printf("Start = %s\n", hostbegin);
-        char *hostend = strpbrk(hostbegin, " :/\r\n");
-        printf("End = %s\n", hostend);
-        int hostlen = hostend - hostbegin;
-        strncpy(Host, hostbegin, hostlen);
-        Host[hostlen] = '\0';
+    if (strcmp("/", uri) == 0) {
+        fprintf(stderr, "根目录");
+        return;
     }
-    
+    char* hostbegin = strstr(uri, "//") + 2;
+    printf("Start = %s\n", hostbegin);
+    char *hostend = strpbrk(hostbegin, " :/\r\n");
+    printf("End = %s\n", hostend);
+    int hostlen = hostend - hostbegin;
+    strncpy(Host, hostbegin, hostlen);
+    Host[hostlen] = '\0';
     printf("Host = %s\n", Host);
     // return;
-    char *portptr = strchr(Host, ':');
+    char *portptr = strchr(hostbegin, ':');
     char port[10] = "80"; // 默认端口
 
     if (portptr) {
         sscanf(portptr, ":%s", port);
     }
-
-    char *pathptr = strchr(Host, '/');
+    char *portend = strpbrk(portptr, " /\r\n");
+    int portlen = portend - portptr - 1;
+    strncpy(Port, portptr + 1, portlen);
+    Port[portlen] = '\0';
+    char *pathptr = strchr(hostend, '/');
     if (pathptr) {
         strcpy(path, pathptr);
     } else {
         strcpy(path, "/");
     }
 
-    printf("Host: %s, Path: %s\n", Host, path);  // Debugging output
+    printf("Host: %s, Path: %s, Port: %s\n", Host, path, Port);  // Debugging output
 
     /* Connect to the target server */
-    int clientfd = Open_clientfd(Host, port);  // Using default HTTP port 80
+    int clientfd = Open_clientfd(Host, Port);  // Using default HTTP port 80
     if (clientfd < 0) {
         fprintf(stderr, "Failed to connect to %s:80\n", Host);
         return;
