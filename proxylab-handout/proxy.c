@@ -34,8 +34,9 @@ int main(int argc, char** argv)
         Getnameinfo((SA *) &clientaddr, clientlen, hostname, MAXLINE, 
                     port, MAXLINE, 0);
         printf("Accepted connection from (%s, %s)\n", hostname, port);
-        doit(connfd);                                             //line:netp:tiny:doit
-        Close(connfd);                                            //line:netp:tiny:close
+        Pthread_create(&tid, NULL, thread, connfdp);
+        // doit(connfd);                                             //line:netp:tiny:doit
+        // Close(connfd);                                            //line:netp:tiny:close
     }
     return 0;
 }
@@ -231,7 +232,7 @@ void *thread(void *vargp) {
     Pthread_detach(pthread_self());
     Free(vargp);
     doit(connfd);
-    close(connfd);
+    Close(connfd);
     return NULL;
 }
 /* $end thread */
